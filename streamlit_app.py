@@ -37,7 +37,7 @@ if page == "Introduction 📘":
     st.dataframe(df.head(rows))
     st.markdown("##### Missing values")
     missing = df.isnull().sum()
-    st.write(missing)
+    st.write(missing) f
 
     if missing.sum() == 0:
         st.success("✅ No missing values found")
