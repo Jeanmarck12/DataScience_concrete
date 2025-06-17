@@ -5,11 +5,6 @@ import streamlit as st
 import numpy as np
 import sklearn
 
-from ydata_profiling import ProfileReport
-from streamlit_pandas_profiling import st_profile_report
-
-
-
 st.set_page_config(
     page_title="Concrete Strength Predictor",
     page_icon="🧱",
@@ -37,7 +32,7 @@ if page == "Introduction 📘":
     st.dataframe(df.head(rows))
     st.markdown("##### Missing values")
     missing = df.isnull().sum()
-    st.write(missing) f
+    st.write(missing)
 
     if missing.sum() == 0:
         st.success("✅ No missing values found")
@@ -88,26 +83,105 @@ elif page == "Visualization 📊":
         st.pyplot(fig_corr)
 
 
+
+
 elif page == "Automated Report 📑":
     st.subheader("03 Automated Report")
 
+    detail_level = st.radio(
+        "Select level of detail:",
+        ["Basic Overview", "Standard EDA", "Advanced EDA"],
+        index=0
+    )
+
     if st.button("Generate Report"):
         with st.spinner("Generating report..."):
-            profile = ProfileReport(
-                df,
-                title="Concrete Strength Data Report",
-                explorative=True,
-                minimal=True
-            )
-            st_profile_report(profile)
 
-        export = profile.to_html()
-        st.download_button(
-            label="📥 Download full Report",
-            data=export,
-            file_name="concrete_strength_report.html",
-            mime='text/html'
-        )
+            # Always show summary stats and missing values
+            st.markdown("### Summary Statistics 📊")
+            st.dataframe(df.describe())
+
+            st.markdown("### Missing Values")
+            missing = df.isnull().sum()
+            st.write(missing)
+            if missing.sum() == 0:
+                st.success("✅ No missing values found")
+            else:
+                st.warning("⚠️ Missing values detected")
+
+            # If Standard or Advanced, add correlation + pairplot
+            if detail_level in ["Standard EDA", "Advanced EDA"]:
+                st.markdown("### Correlation Matrix 🔥")
+                fig_corr, ax_corr = plt.subplots(figsize=(10, 8))
+                sns.heatmap(df.corr(), annot=True, fmt=".2f", cmap='coolwarm', ax=ax_corr)
+                ax_corr.set_title("Correlation Matrix")
+                st.pyplot(fig_corr)
+
+                st.markdown("### Pairplot (sampled if large) 🔍")
+                if df.shape[0] > 500:
+                    df_sample = df.sample(500, random_state=42)
+                    st.info("Pairplot shown for a 500-row sample (for speed).")
+                else:
+                    df_sample = df
+                fig_pair = sns.pairplot(df_sample)
+                st.pyplot(fig_pair.figure)
+
+            # If Advanced, add additional analysis
+            if detail_level == "Advanced EDA":
+                st.markdown("### Constant Columns 🚩")
+                constant_cols = [col for col in df.columns if df[col].nunique() == 1]
+                if constant_cols:
+                    st.warning(f"⚠️ Constant columns: {constant_cols}")
+                else:
+                    st.success("✅ No constant columns")
+
+                st.markdown("### High Cardinality Columns 🚩")
+                cardinality = {col: df[col].nunique() for col in df.columns}
+                high_card_cols = [col for col, uniq in cardinality.items() if uniq > 50]
+                if high_card_cols:
+                    st.warning(f"⚠️ High cardinality columns: {high_card_cols}")
+                else:
+                    st.success("✅ No high cardinality columns")
+
+                st.markdown("### Highly Correlated Pairs (> 0.85) 🚩")
+                corr_matrix = df.corr().abs()
+                upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+                high_corr = [
+                    (col1, col2, upper.loc[col1, col2])
+                    for col1 in upper.columns
+                    for col2 in upper.index
+                    if pd.notnull(upper.loc[col1, col2]) and upper.loc[col1, col2] > 0.85
+                ]
+                if high_corr:
+                    for col1, col2, corr_val in high_corr:
+                        st.warning(f"⚠️ {col1} and {col2} correlation: {corr_val:.2f}")
+                else:
+                    st.success("✅ No highly correlated pairs")
+
+                st.markdown("### Outlier Detection (z-score > 3) 🚩")
+                from scipy.stats import zscore
+                z_scores = np.abs(zscore(df.select_dtypes(include=np.number)))
+                outliers = (z_scores > 3).sum(axis=0)
+                outlier_cols = {col: int(count) for col, count in zip(df.select_dtypes(include=np.number).columns, outliers) if count > 0}
+                if outlier_cols:
+                    st.warning(f"⚠️ Outliers detected:\n{outlier_cols}")
+                else:
+                    st.success("✅ No significant outliers detected")
+
+            # Download summary
+            csv = df.describe().to_csv(index=True).encode()
+            st.download_button(
+                label="📥 Download Summary Statistics CSV",
+                data=csv,
+                file_name="summary_statistics.csv",
+                mime='text/csv'
+            )
+
+
+
+
+
+
 
 
 elif page == "Prediction":
